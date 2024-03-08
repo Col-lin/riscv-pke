@@ -124,6 +124,7 @@ elf_status elf_load_func_name(elf_ctx *ctx) {
     bool find_sym = FALSE;
     char tmp_str[shstr_sh.sh_size];
     elf_fpread(ctx, &tmp_str, shstr_sh.sh_size, shstr_sh.sh_offset);
+
     for(int i = 0; i < sect_num; ++i) {
         elf_fpread(ctx, (void *)&temp_sh, sizeof(temp_sh),
                    (ctx->ehdr).shoff + i * (ctx->ehdr).shentsize);
