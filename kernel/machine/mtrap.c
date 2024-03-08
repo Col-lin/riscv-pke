@@ -1,18 +1,22 @@
 #include "kernel/riscv.h"
 #include "kernel/process.h"
 #include "spike_interface/spike_utils.h"
+#include "kernel/elf.h"
+#include <string.h>
 
-static void handle_instruction_access_fault() { panic("Instruction access fault!"); }
+static void error_printer();
 
-static void handle_load_access_fault() { panic("Load access fault!"); }
+static void handle_instruction_access_fault() { error_printer(); panic("Instruction access fault!"); }
 
-static void handle_store_access_fault() { panic("Store/AMO access fault!"); }
+static void handle_load_access_fault() { error_printer(); panic("Load access fault!"); }
 
-static void handle_illegal_instruction() { panic("Illegal instruction!"); }
+static void handle_store_access_fault() { error_printer(); panic("Store/AMO access fault!"); }
 
-static void handle_misaligned_load() { panic("Misaligned Load!"); }
+static void handle_illegal_instruction() { error_printer(); panic("Illegal instruction!"); }
 
-static void handle_misaligned_store() { panic("Misaligned AMO!"); }
+static void handle_misaligned_load() { error_printer(); panic("Misaligned Load!"); }
+
+static void handle_misaligned_store() { error_printer(); panic("Misaligned AMO!"); }
 
 // added @lab1_3
 static void handle_timer() {
@@ -61,4 +65,42 @@ void handle_mtrap() {
       panic( "unexpected exception happened in M-mode.\n" );
       break;
   }
+}
+
+struct stat f_stat;
+char error_path[256];
+char error_file[10000];
+
+void error_printer() {
+    uint64 exception_addr = read_csr(mepc);
+
+    for(int i = 0; i < current->line_ind; ++i) {
+        if(exception_addr >= current->line[i].addr) continue;
+        addr_line *expecline = current->line + i - 1;
+        int dir_length = strlen(current->dir[current->file[expecline->file].dir]);
+        strcpy(error_path, current->dir[current->file[expecline->file].dir]);
+        error_path[dir_length] = '/';
+        strcpy(error_path + dir_length + 1, current->file[expecline->file].file);
+
+        spike_file_t * _FILE_ = spike_file_open(error_path, O_RDONLY, 0);
+        spike_file_stat(_FILE_, &f_stat);
+        spike_file_read(_FILE_, error_file, f_stat.st_size);
+        spike_file_close(_FILE_);
+        int off = 0, line_cnt = 0;
+        while(off < f_stat.st_size) {
+            int temp = off;
+            while (temp < f_stat.st_size && error_file[temp] != '\n') ++temp;
+            if(line_cnt == expecline->line - 1) {
+                error_file[temp] = '\0';
+                sprint("Runtime error at %s:%d\n%s\n",
+                       error_path, expecline->line, error_file + off);
+                break;
+            } else {
+                ++line_cnt;
+                off = temp + 1;
+            }
+        }
+        break;
+    }
+    return ;
 }

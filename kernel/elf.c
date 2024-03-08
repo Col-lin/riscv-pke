@@ -249,6 +249,42 @@ static size_t parse_args(arg_buf *arg_bug_msg) {
 }
 
 //
+// load the elf of error line
+//
+char debug_info_buf[10000];
+elf_status load_debug_line(elf_ctx *ctx) {
+    elf_sect_header shstr_sh;
+    elf_sect_header debug_sh;
+    elf_sect_header temp_sh;
+
+    //find shstrtab
+    uint16 sect_num = ctx->ehdr.shnum;
+    uint64 shstr_offest = ctx->ehdr.shoff + ctx->ehdr.shstrndx * sizeof(elf_sect_header);
+    elf_fpread(ctx, (void *)&shstr_sh, sizeof(elf_sect_header),
+               shstr_offest);
+    char tmp_str[shstr_sh.size];
+    elf_fpread(ctx, &tmp_str, shstr_sh.size, shstr_sh.offset);
+
+    //find debug_line
+    bool get_debug_line = FALSE;
+    for(int i = 0; i < sect_num; ++i) {
+        elf_fpread(ctx, (void *)&temp_sh, sizeof(temp_sh),
+                   (ctx->ehdr).shoff + i * (ctx->ehdr).shentsize);
+        if(strcmp(tmp_str+temp_sh.name,".debug_line")==0){
+            debug_sh = temp_sh;
+            get_debug_line = TRUE;
+            sprint("get debug_line\n");
+        }
+    }
+    if(get_debug_line == FALSE)
+        return EL_ERR;
+    elf_fpread(ctx, (void *)&debug_info_buf, debug_sh.size, debug_sh.offset);
+    make_addr_line(ctx, debug_info_buf, debug_sh.size);
+    return EL_OK;
+}
+
+
+//
 // load the elf of user application, by using the spike file interface.
 //
 void load_bincode_from_host_elf(process *p) {
@@ -276,6 +312,10 @@ void load_bincode_from_host_elf(process *p) {
 
   // load elf. elf_load() is defined above.
   if (elf_load(&elfloader) != EL_OK) panic("Fail on loading elf.\n");
+
+  // load debug lines load_debug_line() is defined above.
+  if (load_debug_line(&elfloader) != EL_OK) panic("Fail on  loading debug line.\n");
+//  else sprint("%s\n", debug_info_buf);
 
   // entry (virtual, also physical in lab1_x) address
   p->trapframe->epc = elfloader.ehdr.entry;
