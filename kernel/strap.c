@@ -62,13 +62,19 @@ void handle_user_page_fault(uint64 mcause, uint64 sepc, uint64 stval) {
       // hint: first allocate a new physical page, and then, maps the new page to the
       // virtual address that causes the page fault.
 //      panic( "You need to implement the operations that actually handle the page fault in lab2_3.\n" );
-        uint64 pa;
-        pa = (uint64) alloc_page();
-        if ((void*)pa == NULL)
-            sprint("failed to allocate a new physical page\n");
-        else {
-            map_pages(current->pagetable, ROUNDDOWN(stval, PGSIZE), PGSIZE, pa, prot_to_type(PROT_READ | PROT_WRITE, 1));
-        }
+          if (stval < current->trapframe->regs.sp - PGSIZE) {
+              panic("this address is not available!");
+          } else {
+              uint64 pa;
+              pa = (uint64)
+              alloc_page();
+              if ((void *) pa == NULL)
+                  sprint("failed to allocate a new physical page\n");
+              else {
+                  map_pages(current->pagetable, ROUNDDOWN(stval, PGSIZE), PGSIZE, pa,
+                            prot_to_type(PROT_READ | PROT_WRITE, 1));
+              }
+          }
 
       break;
     default:
