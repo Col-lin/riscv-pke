@@ -1,0 +1,1 @@
+在 `pmm.c` 中进行 `alloc_page` 和 `free_page` 操作时需要先锁页，再操作
