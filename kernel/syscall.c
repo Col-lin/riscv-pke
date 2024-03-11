@@ -32,13 +32,12 @@ ssize_t sys_user_print(const char* buf, size_t n) {
 // implement the SYS_user_exit syscall
 //
 ssize_t sys_user_exit(uint64 code) {
-  sprint("User exit with code:%d.\n", code);
-  // reclaim the current process, and reschedule. added @lab3_1
-  free_process( current );
-  schedule();
-  return 0;
+    sprint("User exit with code:%d.\n", code);
+    // reclaim the current process, and reschedule. added @lab3_1
+    free_process( current );
+    schedule();
+    return 0;
 }
-
 //
 // maybe, the simplest implementation of malloc in the world ... added @lab2_2
 //
@@ -59,7 +58,7 @@ uint64 sys_user_allocate_page() {
   }
   user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
          prot_to_type(PROT_WRITE | PROT_READ, 1));
-
+//    sprint("%lx\n",va);
   return va;
 }
 
