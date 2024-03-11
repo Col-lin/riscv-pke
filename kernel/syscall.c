@@ -30,8 +30,10 @@ ssize_t sys_user_print(const char* buf, size_t n) {
 // implement the SYS_user_exit syscall
 //
 ssize_t sys_user_exit(uint64 code) {
+
   sprint("hartid = ?: User exit with code:%d.\n", code);
-  // in lab1, PKE considers only one app (one process). 
+  // in lab1, PKE considers only one app (one process).
+
   // therefore, shutdown the system when the app calls exit()
   sprint("hartid = ?: shutdown with code:%d.\n", code);
   shutdown(code);
@@ -47,6 +49,7 @@ uint64 sys_user_allocate_page() {
   user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
          prot_to_type(PROT_WRITE | PROT_READ, 1));
   sprint("hartid = ?: vaddr 0x%x is mapped to paddr 0x%x\n", va, pa);
+
   return va;
 }
 
