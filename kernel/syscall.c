@@ -62,16 +62,30 @@ typedef struct MCB_t {
 }MCB;
 
 MCB* mcb_head = NULL;
-uint64 user_free_va = USER_FREE_ADDRESS_START;
 
-uint64 allocate_new_page() {
-    char *tmp = alloc_page();
-    memset(tmp, 0, (size_t)PGSIZE);
-    map_pages(current->pagetable, g_ufree_page, PGSIZE, (uint64)tmp, prot_to_type(PROT_READ | PROT_WRITE,1));
-    g_ufree_page += PGSIZE;
-//    sprint("%lx\n",tmp+0x94);
-//    *(tmp+0xac)= 'c';
-    return (uint64)tmp;
+uint64 allocate_new_page(uint64 va, uint64 size) {
+    uint64 page_s = ROUNDDOWN(va, PGSIZE);
+    char *head = NULL;
+//    sprint("va: %lx\npage_s: %lx\nUFAS: %lx\nsize: %lx\n", va, page_s, USER_FREE_ADDRESS_START, size);
+//    sprint(":::%lx\n:::%lx\n",va+size,page_s+PGSIZE);
+    for(int i = va; i < va + size; i += PGSIZE) {
+//        sprint("----------%lx--------\n",ROUNDDOWN(i, PGSIZE));
+        uint64 pte= lookup_pa(current->pagetable, i);
+        char * tmp = NULL;
+        if ((void *)pte == NULL) {
+            tmp = alloc_page();
+//            sprint("tmp:%lx\n",tmp);
+            map_pages(current->pagetable, ROUNDDOWN(i, PGSIZE), PGSIZE,
+                      (uint64)tmp, prot_to_type(PROT_READ | PROT_WRITE, 1));
+        }
+        else
+            tmp = (char *)pte;
+        if(ROUNDDOWN(i, PGSIZE) == page_s) {
+            head = tmp + va - i;
+//            sprint("tmp&head:\n%lx\n%lx\n",pte,head);
+        }
+    }
+    return (uint64)head;
 }
 
 uint64 uint64_min(uint64 a, uint64 b) {
@@ -86,65 +100,70 @@ uint64 addr_align(uint64 adddr) {
 uint64 sys_user_allocate_page(uint64 size) {
     uint64 addr = USER_FREE_ADDRESS_START;
     if ((void *)mcb_head == NULL)  {
-        uint64 pa = allocate_new_page();
+        uint64 pa = allocate_new_page(USER_FREE_ADDRESS_START, size + sizeof(MCB));
         mcb_head = (MCB *)pa;
+//        sprint("-------------%lx--------------\n",pa);
         mcb_head->MCB_last = NULL;
         mcb_head->MCB_next = NULL;
         mcb_head->MCB_size = size;
         mcb_head->MCB_va = addr;
         mcb_head->MCB_pa = pa;
         mcb_head->PG_INX = pa;
-        user_free_va = USER_FREE_ADDRESS_START + size + sizeof(MCB);
-        return (uint64)mcb_head + sizeof(MCB);
+        return (uint64)addr + sizeof(MCB);
     }
     MCB * cur = mcb_head;
-    MCB * next = cur->MCB_next;
+    if(mcb_head->MCB_va != USER_FREE_ADDRESS_START) {
+        uint64 empty_size = uint64_min(PGSIZE, mcb_head->MCB_va - USER_FREE_ADDRESS_START);
+        if (empty_size >= size + sizeof(MCB)) {
+            uint64 pa;
+            if (mcb_head->MCB_va - USER_FREE_ADDRESS_START > PGSIZE) {
+                pa = allocate_new_page(USER_FREE_ADDRESS_START, size + sizeof(MCB));
+            } else {
+                pa = mcb_head->PG_INX;
+            }
+            cur = (MCB *)pa;
+            cur->MCB_va = USER_FREE_ADDRESS_START;
+            cur->MCB_pa = pa;
+            cur->PG_INX = pa;
+            cur->MCB_size = size;
+            cur->MCB_last = NULL;
+            cur->MCB_next = mcb_head;
+            mcb_head->MCB_last = cur;
+            mcb_head = cur;
+            return (uint64)mcb_head->MCB_va + sizeof(MCB);
+        }
+    }
     while((void *)cur->MCB_next != NULL) {
-        next = (MCB *) addr_align(cur->MCB_pa + cur->MCB_size + sizeof(MCB));
-        uint64 empty_size = cur->MCB_next->MCB_pa - (uint64)next;
-        empty_size = uint64_min(empty_size, (cur->PG_INX + PGSIZE) - (uint64)next);
+        addr = addr_align(cur->MCB_va + cur->MCB_size + sizeof(MCB));
+        uint64 empty_size = cur->MCB_next->MCB_va - (uint64)addr;
+        empty_size = uint64_min(empty_size,
+                                ((cur->MCB_va >> 12) << 12 ) + PGSIZE - (uint64)addr);
         if (empty_size < size + sizeof(MCB)) {
             cur = cur->MCB_next;
         } else {
-            MCB * tmp = (MCB *)next;
+            uint64 pa = allocate_new_page(addr, size + sizeof(MCB));
+            MCB * tmp = (MCB *)pa;
             tmp->MCB_next = cur->MCB_next;
             tmp->MCB_last = cur;
             (tmp->MCB_next)->MCB_last = tmp;
             cur->MCB_next = tmp;
             tmp->MCB_size = size;
-            tmp->PG_INX = cur->PG_INX;
-            tmp->MCB_va = cur->MCB_va + cur->MCB_size + sizeof(MCB);
-            tmp->MCB_pa = cur->MCB_pa + cur->MCB_size + sizeof(MCB);
-            return (uint64)tmp + sizeof(MCB);
+            tmp->PG_INX = (uint64)PTE2PA(*page_walk(current->pagetable, addr, 1));
+            tmp->MCB_pa = (uint64)pa;
+            tmp->MCB_va = (uint64)addr;
+            return (uint64)tmp->MCB_va + sizeof(MCB);
         }
     }
-    addr = addr_align(cur->MCB_pa + cur->MCB_size + sizeof(MCB));
-    if((cur->PG_INX + PGSIZE) - addr >= size + sizeof(MCB)) {
-        MCB * tmp = (MCB *) addr;
-//        sprint("--------%d------\n",size);
-//            sprint("--------------%lx-----------------\n",tmp);
-        tmp->MCB_size = size;
-        tmp->MCB_pa = cur->MCB_pa + cur->MCB_size + sizeof(MCB);
-        tmp->MCB_va = cur->MCB_va + cur->MCB_size + sizeof(MCB);
-        tmp->PG_INX = cur->PG_INX;
-        cur->MCB_next = tmp;
-        tmp->MCB_next = NULL;
-        tmp->MCB_last = cur;
-        return (uint64)tmp;
-    } else {
-        addr = g_ufree_page;
-        uint64 pa = allocate_new_page();
-        MCB * tmp = (MCB *)addr;
-        tmp->MCB_size = size;
-        tmp->MCB_pa = pa;
-        tmp->MCB_va = addr;
-        tmp->PG_INX = addr;
-        tmp->MCB_next =NULL;
-        tmp->MCB_last = cur;
-        cur->MCB_next = tmp;
-        return (uint64)tmp;
-    }
-    return 0;
+    addr = addr_align(cur->MCB_va + cur->MCB_size + sizeof(MCB));
+    uint64 pa = allocate_new_page(addr, size + sizeof(MCB));
+    MCB * tmp = (MCB *)pa;
+    tmp->MCB_next = NULL;
+    tmp->MCB_last = cur;
+    tmp->MCB_va = addr;
+    tmp->MCB_pa = pa;
+    tmp->MCB_size = size;
+    tmp->PG_INX = (uint64)PTE2PA(*page_walk(current->pagetable, addr, 1));
+    return (uint64)addr + sizeof(MCB);
 }
 
 //
@@ -161,6 +180,23 @@ uint64 uint64_max(uint64 a, uint64 b) {
     return a>b?a:b;
 }
 
+void mcb_free_page(MCB * mcb) {
+    for(int i = mcb->MCB_va; i < mcb->MCB_va + sizeof(MCB); i += PGSIZE) {
+        uint64 inx = lookup_pa(current->pagetable, i);
+        MCB * cur = mcb_head;
+        bool page_free = TRUE;
+        while((void *)cur != NULL) {
+            if(lookup_pa(current->pagetable, cur->MCB_va) == inx) {
+                page_free = FALSE;
+                break;
+            }
+            cur = cur->MCB_next;
+        }
+        if(page_free)
+            user_vm_unmap(current->pagetable, ROUNDDOWN(i, PGSIZE), PGSIZE, 1);
+    }
+}
+
 uint64 sys_user_free_page(uint64 va) {
     MCB * cur = mcb_head;
     MCB * free_mcb = NULL;
@@ -173,21 +209,17 @@ uint64 sys_user_free_page(uint64 va) {
     }
     if((void *)free_mcb == NULL)
         return -1;
-    free_mcb->MCB_last->MCB_next = free_mcb->MCB_next;
-    if((void *) free_mcb->MCB_next != NULL)
-        free_mcb->MCB_next->MCB_last = free_mcb->MCB_last;
-    cur = mcb_head;
-    bool page_free = TRUE;
-    while((void *)cur != NULL) {
-        if(cur->PG_INX == free_mcb->PG_INX) {
-            page_free = FALSE;
-            break;
-        }
-        cur = cur->MCB_next;
+    if(free_mcb == mcb_head) {
+        mcb_head = mcb_head->MCB_next;
+        if((void *)mcb_head != NULL)
+            mcb_head->MCB_last = NULL;
+    } else {
+        free_mcb->MCB_last->MCB_next = free_mcb->MCB_next;
+        if ((void *) free_mcb->MCB_next != NULL)
+            free_mcb->MCB_next->MCB_last = free_mcb->MCB_last;
     }
-    if(page_free)
-        user_vm_unmap((pagetable_t)current->pagetable, va, PGSIZE, 1);
-    else memset((void *)free_mcb, 0, sizeof(MCB) + free_mcb->MCB_size);
+//    sprint("--------%lx--------\n", va);
+    mcb_free_page(free_mcb);
     return 0;
 }
 
@@ -202,13 +234,8 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
     case SYS_user_exit:
       return sys_user_exit(a1);
     // added @lab2_2
-    case SYS_user_allocate_page: {
-        uint64 va;
-        va = sys_user_allocate_page(a1);
-        sprint("%lx\n", va);
-        return va;
-    }
-//      return sys_user_allocate_page(a1);
+    case SYS_user_allocate_page:
+      return sys_user_allocate_page(a1);
     case SYS_user_free_page:
       return sys_user_free_page(a1);
     default:
