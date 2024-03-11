@@ -53,11 +53,11 @@ uint64 sys_user_allocate_page() {
 }
  */
 typedef struct MCB_t {
-    uint64 PG_INX;
-    uint64 MCB_va;
-    uint64 MCB_pa;
-    uint64 MCB_size;
-    struct MCB_t* MCB_last;
+    uint64 PG_INX;          // address of the first physical page of the mcb
+    uint64 MCB_va;          // va of the mcb
+    uint64 MCB_pa;          // pa of the mcb
+    uint64 MCB_size;        // size of the mcb , include 2 parts : mcb_index and data part
+    struct MCB_t* MCB_last;     // chain structure
     struct MCB_t* MCB_next;
 }MCB;
 
