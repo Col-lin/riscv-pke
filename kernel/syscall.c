@@ -150,9 +150,45 @@ uint64 sys_user_allocate_page(uint64 size) {
 //
 // reclaim a page, indicated by "va". added @lab2_2
 //
+/*
 uint64 sys_user_free_page(uint64 va) {
   user_vm_unmap((pagetable_t)current->pagetable, va, PGSIZE, 1);
   return 0;
+}
+ */
+
+uint64 uint64_max(uint64 a, uint64 b) {
+    return a>b?a:b;
+}
+
+uint64 sys_user_free_page(uint64 va) {
+    MCB * cur = mcb_head;
+    MCB * free_mcb = NULL;
+    while((void *)cur != NULL) {
+        if(va >= cur->MCB_va && va <= cur->MCB_va + cur->MCB_size) {
+            free_mcb = cur;
+            break;
+        }
+        cur = cur->MCB_next;
+    }
+    if((void *)free_mcb == NULL)
+        return -1;
+    free_mcb->MCB_last->MCB_next = free_mcb->MCB_next;
+    if((void *) free_mcb->MCB_next != NULL)
+        free_mcb->MCB_next->MCB_last = free_mcb->MCB_last;
+    cur = mcb_head;
+    bool page_free = TRUE;
+    while((void *)cur != NULL) {
+        if(cur->PG_INX == free_mcb->PG_INX) {
+            page_free = FALSE;
+            break;
+        }
+        cur = cur->MCB_next;
+    }
+    if(page_free)
+        user_vm_unmap((pagetable_t)current->pagetable, va, PGSIZE, 1);
+    else memset((void *)free_mcb, 0, sizeof(MCB) + free_mcb->MCB_size);
+    return 0;
 }
 
 //
