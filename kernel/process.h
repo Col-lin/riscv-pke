@@ -105,5 +105,19 @@ int do_fork(process* parent);
 
 // current running process
 extern process* current;
+enum sem_type {
+    SEM_FREE = 0,
+    SEM_USED
+};
+
+#define NSEM 32
+
+typedef struct SEM_T {
+    int counter;
+    uint64 status;
+    process *proc;
+}SEM;
+
+void init_sem_pool();
 
 #endif

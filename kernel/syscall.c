@@ -95,6 +95,55 @@ ssize_t sys_user_yield() {
   return 0;
 }
 
+extern SEM sems[NSEM];
+
+ssize_t sys_user_sem_new(uint64 value) {
+    for (int i = 0; i < NSEM; ++i) {
+        if (sems[i].status == SEM_FREE) {
+            sems[i].status = SEM_USED;
+            sems[i].counter = value;
+            sems[i].proc = NULL;
+            return i;
+        }
+    }
+    return -1;
+}
+
+ssize_t sys_user_sem_P(uint64 sem) {
+    if (sems[sem].status == SEM_FREE)
+        return -1;
+    --sems[sem].counter;
+    if (sems[sem].counter < 0) {
+        current->queue_next = NULL;
+        if (sems[sem].proc == NULL) {
+            sems[sem].proc = current;
+        } else {
+            process * p = sems[sem].proc;
+            while(p->queue_next != NULL)
+                p = p->queue_next;
+            p->queue_next = current;
+        }
+        current->status = BLOCKED;
+        schedule();
+    }
+    return 0;
+}
+
+ssize_t sys_user_sem_V(uint64 sem) {
+    if (sems[sem].status == SEM_FREE)
+        return -1;
+    ++sems[sem].counter;
+    if (sems[sem].counter >= 0) {
+        process * p = sems[sem].proc;
+        if(p == NULL)
+            return 0;
+        sems[sem].proc = p->queue_next;
+        p->status = READY;
+        insert_to_ready_queue(p);
+    }
+    return 0;
+}
+
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
 // returns the code of success, (e.g., 0 means success, fail for otherwise)
@@ -114,6 +163,12 @@ long do_syscall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, l
       return sys_user_fork();
     case SYS_user_yield:
       return sys_user_yield();
+      case SYS_user_sem_new:
+          return sys_user_sem_new(a1);
+      case SYS_user_sem_P:
+          return sys_user_sem_P(a1);
+      case SYS_user_sem_V:
+          return sys_user_sem_V(a1);
     default:
       panic("Unknown syscall %ld \n", a0);
   }

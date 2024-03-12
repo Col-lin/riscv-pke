@@ -29,6 +29,8 @@ extern char trap_sec_start[];
 // process pool. added @lab3_1
 process procs[NPROC];
 
+SEM sems[NSEM];
+
 // current points to the currently running user-mode application.
 process* current = NULL;
 
@@ -175,6 +177,7 @@ int free_process( process* proc ) {
 // segments (code, system) of the parent to child. the stack segment remains unchanged
 // for the child.
 //
+int free_block_filter[MAX_HEAP_PAGES];
 int do_fork( process* parent)
 {
   sprint( "will fork a child from parent %d.\n", parent->pid );
@@ -196,7 +199,6 @@ int do_fork( process* parent)
 
         // convert free_pages_address into a filter to skip reclaimed blocks in the heap
         // when mapping the heap blocks
-        int free_block_filter[MAX_HEAP_PAGES];
         memset(free_block_filter, 0, MAX_HEAP_PAGES);
         uint64 heap_bottom = parent->user_heap.heap_bottom;
         for (int i = 0; i < parent->user_heap.free_pages_count; i++) {
@@ -252,4 +254,13 @@ int do_fork( process* parent)
   insert_to_ready_queue( child );
 
   return child->pid;
+}
+
+void init_sem_pool() {
+    for (int i = 0; i < NSEM; ++i) {
+        sems[i].status = SEM_FREE;
+        sems[i].proc = NULL;
+        sems[i].counter = 0;
+    }
+    return;
 }
