@@ -14,6 +14,7 @@
 #include "spike_interface/spike_utils.h"
 #include "util/functions.h"
 #include "util/string.h"
+#include "vmm.h"
 
 //
 // initialize file system
@@ -79,7 +80,28 @@ struct file *get_opened_file(int fd) {
 // open a file named as "pathname" with the permission of "flags".
 // return: -1 on failure; non-zero file-descriptor on success.
 //
-int do_open(char *pathname, int flags) {
+int do_open(char *pathpa, int flags) {
+    char pathname[256];
+    if (pathpa[0] == '.' && pathpa[1] == '.') {
+//        退回父目录
+        if (current->pfiles->cwd->parent == NULL) {
+            strcpy(pathname, "/");
+        } else {
+            strcpy(pathname , current->pfiles->cwd->parent->name);
+            pathpa += 2;
+            if (pathpa[0] == '/')
+                ++pathpa;
+            strcat(pathname, pathpa);
+        }
+    } else if (pathpa[0] == '.' && pathpa[1] != '.') {
+        strcpy(pathname, current->pfiles->cwd->name);
+        ++pathpa;
+        if (!strcmp(current->pfiles->cwd->name, "/"))
+            *pathname = 0;
+        strcat(pathname, pathpa);
+    } else {
+        strcpy(pathname, pathpa);
+    }
   struct file *opened_file = NULL;
   if ((opened_file = vfs_open(pathname, flags)) == NULL) return -1;
 
@@ -220,4 +242,41 @@ int do_link(char *oldpath, char *newpath) {
 //
 int do_unlink(char *path) {
   return vfs_unlink(path);
+}
+
+
+int do_read_cwd(char *path) {
+    if (current->pfiles->cwd == NULL)
+        return -1;
+    strcpy((char *) user_va_to_pa(current->pagetable, path), current->pfiles->cwd->name);
+    return 0;
+}
+
+int do_change_cwd(char *path) {
+    if (current->pfiles->cwd == NULL)
+        return -1;
+    char *pathpa = (char *) user_va_to_pa(current->pagetable, path);
+    if (pathpa[0] == '.' && pathpa[1] == '.') {
+//        退回父目录
+        if (current->pfiles->cwd->parent == NULL) {
+            strcpy(current->pfiles->cwd->name, "/");
+        } else {
+            strcpy(current->pfiles->cwd->name, current->pfiles->cwd->parent->name);
+            struct dentry *prt = current->pfiles->cwd->parent;
+            current->pfiles->cwd->parent->parent = current->pfiles->cwd;
+            free_page(prt);
+            pathpa += 2;
+            if (pathpa[0] == '/')
+                ++pathpa;
+            strcat(current->pfiles->cwd->name, pathpa);
+        }
+    } else if (pathpa[0] == '.' && pathpa[1] != '.') {
+        ++pathpa;
+        if (!strcmp(current->pfiles->cwd->name, "/"))
+            *current->pfiles->cwd->name = 0;
+        strcat(current->pfiles->cwd->name, pathpa);
+    } else {
+        strcpy(current->pfiles->cwd->name, pathpa);
+    }
+    return 0;
 }
