@@ -257,3 +257,31 @@ int do_fork( process* parent)
 
   return child->pid;
 }
+
+//
+// lib call to exec
+// added @lab4_challenge2
+//
+int do_exec(char *path) {
+    struct file * file = vfs_open(path,O_RDONLY);
+    if(IS_ERR_VALUE(file)) {
+        panic("Fail on openning the input application program.\n");
+        return -1;
+    }
+    elf_ctx elfloader;
+    elf_info info;
+    info.f = file;
+    info.p = current;
+    if(elf_init(&elfloader, &info) != EL_OK) {
+        panic("fail to init elfloader.\n");
+        return -1;
+    }
+    if(elf_reload(&elfloader, &info) != EL_OK){
+        panic("Fail on loading elf.\n");
+        return -1;
+    }
+    current->trapframe->epc = elfloader.ehdr.entry;
+    vfs_close(file);
+    sprint("Application program entry point (virtual address): 0x%lx\n", current->trapframe->epc);
+    return 0;
+}
