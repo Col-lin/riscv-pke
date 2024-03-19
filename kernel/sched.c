@@ -6,6 +6,7 @@
 #include "spike_interface/spike_utils.h"
 
 process* ready_queue_head = NULL;
+process* blocked_queue_head = NULL;
 
 //
 // insert a process, proc, into the END of ready queue.
@@ -33,6 +34,27 @@ void insert_to_ready_queue( process* proc ) {
   proc->queue_next = NULL;
 
   return;
+}
+
+void insert_to_blocked_queue(process* proc) {
+    if (blocked_queue_head == NULL) {
+        proc->status = BLOCKED;
+        proc->queue_next = NULL;
+        blocked_queue_head = proc;
+        return;
+    }
+
+    process *p;
+    p = blocked_queue_head;
+    while(p->queue_next != NULL) {
+        if(p == proc) return;
+        p = p->queue_next;
+    }
+    if (p == proc) return;
+    p->queue_next = proc;
+    proc->status = BLOCKED;
+    proc->queue_next = NULL;
+    return;
 }
 
 //
@@ -70,4 +92,31 @@ void schedule() {
   current->status = RUNNING;
   sprint( "going to schedule process %d to run.\n", current->pid );
   switch_to( current );
+}
+
+void free_blocked_process(process* proc) {
+    if (blocked_queue_head == NULL)
+        return;
+    process* p;
+    p = blocked_queue_head;
+    if (p == proc->parent) {
+        blocked_queue_head = p->queue_next;
+        p->status = READY;
+        p->queue_next = NULL;
+        insert_to_ready_queue(p);
+        return;
+    }
+    while(p->queue_next != NULL) {
+        if(p->queue_next == proc->parent) {
+            process* cur = p->queue_next;
+            p->queue_next = cur->queue_next;
+            cur->status = READY;
+            cur->queue_next = NULL;
+            insert_to_ready_queue(cur);
+            return;
+        } else {
+            p = p->queue_next;
+        }
+    }
+    return;
 }

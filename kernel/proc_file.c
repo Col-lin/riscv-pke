@@ -50,6 +50,18 @@ proc_file_management *init_proc_file_management(void) {
   return pfiles;
 }
 
+proc_file_management *init_proc_file_management_new(void) {
+    proc_file_management *pfiles = (proc_file_management *)alloc_page();
+    pfiles->cwd = vfs_root_dentry; // by default, cwd is the root
+    pfiles->nfiles = 0;
+
+    for (int fd = 0; fd < MAX_FILES; ++fd)
+        pfiles->opened_files[fd].status = FD_NONE;
+
+//    sprint("FS: created a file management struct for a process.\n");
+    return pfiles;
+}
+
 //
 // reclaim the open-file management data structure of a process.
 // note: this function is not used as PKE does not actually reclaim a process.

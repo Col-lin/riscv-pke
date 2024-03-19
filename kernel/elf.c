@@ -11,11 +11,6 @@
 #include "vfs.h"
 #include "spike_interface/spike_utils.h"
 
-typedef struct elf_info_t {
-  struct file *f;
-  process *p;
-} elf_info;
-
 //
 // the implementation of allocater. allocates memory space for later segment loading.
 // this allocater is heavily modified @lab2_1, where we do NOT work in bare mode.

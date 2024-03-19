@@ -110,4 +110,9 @@ int do_fork(process* parent);
 // current running process
 extern process* current;
 
+// wait
+int do_wait(uint64 pid);
+
+// lib call to exec
+int do_exec(char *path, char *para);
 #endif
