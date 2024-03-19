@@ -263,7 +263,7 @@ int do_fork( process* parent)
 // added @lab4_challenge2
 //
 int do_exec(char *path) {
-    struct file * file = vfs_open(path,O_RDONLY);
+    spike_file_t * file = spike_file_open(path,O_RDONLY, 0);
     if(IS_ERR_VALUE(file)) {
         panic("Fail on openning the input application program.\n");
         return -1;
@@ -281,7 +281,7 @@ int do_exec(char *path) {
         return -1;
     }
     current->trapframe->epc = elfloader.ehdr.entry;
-    vfs_close(file);
+    spike_file_close(file);
     sprint("Application program entry point (virtual address): 0x%lx\n", current->trapframe->epc);
     return 0;
 }

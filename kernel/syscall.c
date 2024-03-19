@@ -220,7 +220,11 @@ ssize_t sys_user_unlink(char * vfn){
 //
 ssize_t sys_user_exec(char * path) {
     char *pa = (char *)user_va_to_pa((pagetable_t)(current->pagetable), (void *)path);
-    return do_exec(pa);
+    char * new_path = (char*)alloc_page();
+    strcpy(new_path, H_ROOT_DIR);
+    strcpy(new_path+strlen(H_ROOT_DIR), pa);
+    sprint("Application: %s\n", new_path);
+    return do_exec(new_path);
 }
 //
 // [a0]: the syscall number; [a1] ... [a7]: arguments to the syscalls.
